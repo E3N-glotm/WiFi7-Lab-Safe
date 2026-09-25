@@ -1,0 +1,6 @@
+id=wifi7_lab_safe
+name=WiFi 7 Lab Capability Keeper
+version=v1.3.0
+versionCode=130
+author=E3N
+description=Configurable EHT/MLO/6GHz capability and robust Android framework country-code request layer for pudding/peach_v2. Readback-verified with retry logic.
