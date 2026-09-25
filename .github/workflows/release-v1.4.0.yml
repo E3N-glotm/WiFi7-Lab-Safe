@@ -1,0 +1,75 @@
+name: Publish v1.4.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/release-v1.4.0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Validate module version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '^version=v1.4.0$' module.prop
+          grep -q '^versionCode=140$' module.prop
+          sh -n common.sh
+          sh -n service.sh
+          sh -n post-fs-data.sh
+          sh -n action.sh
+          sh -n profile.sh
+          sh -n uninstall.sh
+
+      - name: Build Magisk module ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="WiFi7-Lab-Safe-v1.4.0.zip"
+          rm -f "$ZIP"
+          zip -9 "$ZIP"             module.prop             wifi7_lab_safe.conf             common.sh             service.sh             post-fs-data.sh             action.sh             profile.sh             uninstall.sh             README.md
+          sha256sum "$ZIP" | tee SHA256SUMS.txt
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## WiFi7-Lab-Safe v1.4.0
+
+          ### Changes
+          - Added SYSTEM / US / CA / CN / JP / CUSTOM country profiles.
+          - Added Android Framework + Qualcomm self-managed PHY country readback.
+          - Added driver-country verification before reporting profile apply success.
+          - Added vendor capability audit for Fast Roam, SU Beamforming, 6 GHz, TWT, NAN, TDLS, MLO link count, and EHT/MLO crypto capability.
+          - Added 2.4 / 5 / 6 GHz enabled, disabled, and DFS channel summaries.
+          - Added full PHY frequency-table export and current interface/link diagnostics.
+          - Added profile.sh for explicit profile switching.
+          - Retains EHT/MLO capability keepers and transient Wi-Fi Binder retry handling.
+
+          ### Validation
+          Validated on Xiaomi pudding / Android 16 / Qualcomm qca_cld3_peach_v2.
+
+          ### Scope
+          For learning, research, interoperability, and controlled-laboratory reference only.
+
+          The module does not patch Qualcomm regulatory databases, construct mixed regulatory domains, disable DFS/AFC enforcement, or force transmit power outside the selected regulatory domain.
+
+          The attached ZIP is the Magisk-installable v1.4.0 package. SHA-256 is included in SHA256SUMS.txt.
+          EOF
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v1.4.0             WiFi7-Lab-Safe-v1.4.0.zip             SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "WiFi7-Lab-Safe v1.4.0"             --notes-file RELEASE_NOTES.md
