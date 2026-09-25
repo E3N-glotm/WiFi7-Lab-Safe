@@ -1,6 +1,6 @@
 id=wifi7_lab_safe
-name=WiFi 7 Lab Capability Keeper
-version=v1.3.0
-versionCode=130
+name=WiFi 7 Capability Keeper
+version=v1.4.0
+versionCode=140
 author=E3N
-description=Configurable EHT/MLO/6GHz capability and robust Android framework country-code request layer for pudding/peach_v2. Readback-verified with retry logic.
+description=Keeps EHT/MLO/6GHz capabilities available, applies a standards-compliant Android Wi-Fi country profile with framework+driver readback, and exports detailed Wi-Fi 7 diagnostics for pudding/peach_v2. Does not patch regdb, bypass DFS/AFC, or force out-of-domain TX power.
