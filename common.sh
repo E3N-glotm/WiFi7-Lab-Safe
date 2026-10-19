@@ -90,11 +90,23 @@ wait_wifi_ready() {
 }
 
 apply_capability_keepers() {
+  # Preserve cross-ROM behavior: a property must be exposed by the installed
+  # WLAN stack. 'resetprop -n' used to invent properties on unrelated versions.
   if [ "$KEEP_EHT" = "1" ]; then
-    resetprop -n persist.vendor.wlan.disable.eht false
+    if [ -n "$(getprop persist.vendor.wlan.disable.eht)" ]; then
+      resetprop -n persist.vendor.wlan.disable.eht false
+      log "EHT switch interface detected: $(getprop persist.vendor.wlan.disable.eht)"
+    else
+      log "EHT property absent: leave vendor WLAN stack unchanged"
+    fi
   fi
   if [ "$KEEP_MLO" = "1" ]; then
-    resetprop -n persist.vendor.wlan.disable.mlo false
+    if [ -n "$(getprop persist.vendor.wlan.disable.mlo)" ]; then
+      resetprop -n persist.vendor.wlan.disable.mlo false
+      log "MLO switch interface detected: $(getprop persist.vendor.wlan.disable.mlo)"
+    else
+      log "MLO property absent: leave vendor WLAN stack unchanged"
+    fi
   fi
 
   if [ "$CHECK_6GHZ_VENDOR_CAPABILITY" = "1" ] && [ -r "$VENDOR_CFG" ]; then
