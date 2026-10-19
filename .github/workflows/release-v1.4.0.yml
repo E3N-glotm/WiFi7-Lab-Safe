@@ -1,4 +1,4 @@
-name: Publish v1.4.0
+name: Publish v1.4.1
 
 on:
   push:
@@ -6,6 +6,10 @@ on:
       - main
     paths:
       - ".github/workflows/release-v1.4.0.yml"
+      - "module.prop"
+      - "common.sh"
+      - "service.sh"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,8 +25,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q '^version=v1.4.0$' module.prop
-          grep -q '^versionCode=140$' module.prop
+          grep -q '^version=v1.4.1$' module.prop
+          grep -q '^versionCode=141$' module.prop
           sh -n common.sh
           sh -n service.sh
           sh -n post-fs-data.sh
@@ -34,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="WiFi7-Lab-Safe-v1.4.0.zip"
+          ZIP="WiFi7-Lab-Safe-v1.4.1.zip"
           rm -f "$ZIP"
           zip -9 "$ZIP"             module.prop             wifi7_lab_safe.conf             common.sh             service.sh             post-fs-data.sh             action.sh             profile.sh             uninstall.sh             README.md
           sha256sum "$ZIP" | tee SHA256SUMS.txt
@@ -43,7 +47,7 @@ jobs:
         shell: bash
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## WiFi7-Lab-Safe v1.4.0
+          ## WiFi7-Lab-Safe v1.4.1
 
           ### Changes
           - Added SYSTEM / US / CA / CN / JP / CUSTOM country profiles.
@@ -53,6 +57,7 @@ jobs:
           - Added 2.4 / 5 / 6 GHz enabled, disabled, and DFS channel summaries.
           - Added full PHY frequency-table export and current interface/link diagnostics.
           - Added profile.sh for explicit profile switching.
+          - EHT/MLO enable flags are changed only when the running WLAN stack exposes the corresponding vendor properties; no fabricated missing props.
           - Retains EHT/MLO capability keepers and transient Wi-Fi Binder retry handling.
 
           ### Validation
@@ -63,7 +68,7 @@ jobs:
 
           The module does not patch Qualcomm regulatory databases, construct mixed regulatory domains, disable DFS/AFC enforcement, or force transmit power outside the selected regulatory domain.
 
-          The attached ZIP is the Magisk-installable v1.4.0 package. SHA-256 is included in SHA256SUMS.txt.
+          The attached ZIP is the Magisk-installable v1.4.1 package. SHA-256 is included in SHA256SUMS.txt.
           EOF
 
       - name: Publish GitHub Release
@@ -72,4 +77,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create v1.4.0             WiFi7-Lab-Safe-v1.4.0.zip             SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "WiFi7-Lab-Safe v1.4.0"             --notes-file RELEASE_NOTES.md
+          gh release create v1.4.1             WiFi7-Lab-Safe-v1.4.1.zip             SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "WiFi7-Lab-Safe v1.4.1"             --notes-file RELEASE_NOTES.md
