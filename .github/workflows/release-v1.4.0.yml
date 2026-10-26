@@ -77,4 +77,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if gh release view v1.4.1 >/dev/null 2>&1; then
+            echo "Release v1.4.1 already exists; keeping published artifact unchanged."
+            exit 0
+          fi
           gh release create v1.4.1             WiFi7-Lab-Safe-v1.4.1.zip             SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "WiFi7-Lab-Safe v1.4.1"             --notes-file RELEASE_NOTES.md
