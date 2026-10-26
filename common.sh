@@ -1,7 +1,7 @@
 #!/system/bin/sh
 MODDIR=${0%/*}
-CONF=/data/adb/wifi7_lab_safe.conf
-LOG=/data/adb/wifi7_lab_safe.log
+CONF=${WIFI7_CONF:-/data/adb/wifi7_lab_safe.conf}
+LOG=${WIFI7_LOG:-/data/adb/wifi7_lab_safe.log}
 VENDOR_CFG=/vendor/etc/wifi/peach_v2/WCNSS_qcom_cfg.ini
 
 if [ ! -e "$CONF" ] && [ -r "$MODDIR/wifi7_lab_safe.conf" ]; then
@@ -25,6 +25,7 @@ fi
 : "${REQUEST_UNRESTRICTED_REGDOMAIN:=0}"
 : "${REQUEST_FULL_TX_POWER:=0}"
 : "${REQUEST_DISABLE_DFS_AFC:=0}"
+: "${COUNTRY_STATUS_REFRESH_SEC:=300}"
 
 log() {
   echo "$(date '+%F %T') $*" >> "$LOG"
@@ -55,6 +56,73 @@ driver_country() {
         gsub(":", "", $2); print $2; exit
       }
     '
+}
+
+# A country returned by Android is not proof that the regulatory PHY has
+# accepted it. Report only the self-managed PHY readback as the driver value;
+# never silently substitute the configured code or the global regulatory
+# domain for an unreadable driver.
+display_country() {
+  cc=$(upper "$1")
+  case "$cc" in
+    [A-Z][A-Z]) printf '%s' "$cc" ;;
+    00) printf '00(未指定)' ;;
+    *) printf '未知' ;;
+  esac
+}
+
+country_status_description() {
+  fw_raw=$(framework_country)
+  drv_raw=$(driver_country)
+  fw=$(display_country "$fw_raw")
+  drv=$(display_country "$drv_raw")
+  profile=$(upper "$COUNTRY_PROFILE")
+  request=$(requested_country)
+  if [ "$profile" = "SYSTEM" ]; then
+    request='系统自动'
+  elif [ -z "$request" ]; then
+    request='无效配置'
+  fi
+
+  if valid_cc "$(upper "$drv_raw")" && valid_cc "$(upper "$fw_raw")"; then
+    if [ "$(upper "$drv_raw")" != "$(upper "$fw_raw")" ]; then
+      consistency='不一致'
+    elif [ "$profile" != "SYSTEM" ] && [ "$(upper "$drv_raw")" != "$request" ]; then
+      consistency='请求未生效'
+    else
+      consistency='一致'
+    fi
+  else
+    consistency='未验证'
+  fi
+  # A positive Framework/PHY agreement is still not a channel/power test.
+  # Keep the source explicit in the Magisk module description.
+  printf '驱动国家码:%s | 系统:%s | 请求:%s [%s]' \
+    "$drv" "$fw" "$request" "$consistency"
+}
+
+refresh_module_description() {
+  prop="$MODDIR/module.prop"
+  [ -f "$prop" ] || return 1
+  desc=$(country_status_description)
+  current=$(sed -n 's/^description=//p' "$prop" | head -1)
+  [ "$current" = "$desc" ] && return 0
+
+  # Atomic update: Magisk should never read a truncated module.prop.
+  tmp="$MODDIR/.module.prop.$$"
+  if ! awk -v line="description=$desc" '
+    BEGIN { found=0 }
+    /^description=/ { if (!found) print line; found=1; next }
+    { print }
+    END { if (!found) print line }
+  ' "$prop" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod 0644 "$tmp" || { rm -f "$tmp"; return 1; }
+  mv -f "$tmp" "$prop" || { rm -f "$tmp"; return 1; }
+  log "Magisk status: $desc"
+  return 0
 }
 
 requested_country() {
@@ -176,14 +244,15 @@ apply_country() {
   [ "$max" -ge 1 ] 2>/dev/null || max=12
 
   while [ "$i" -le "$max" ]; do
-    if apply_country_once; then
+    apply_country_once
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
       fw=$(framework_country)
       drv=$(driver_country)
       log "SUCCESS country profile=$COUNTRY_PROFILE framework=${fw:-unknown} driver=${drv:-unknown} attempt=$i/$max"
       return 0
     fi
 
-    rc=$?
     fw=$(framework_country)
     drv=$(driver_country)
     log "RETRY country profile=$COUNTRY_PROFILE code=$COUNTRY_CODE framework=${fw:-unknown} driver=${drv:-unknown} rc=$rc attempt=$i/$max"

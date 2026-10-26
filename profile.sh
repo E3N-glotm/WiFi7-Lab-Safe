@@ -36,3 +36,7 @@ fi
 chmod 0644 "$CONF"
 echo "Saved profile: $p"
 echo "Run $MODDIR/action.sh to apply and export diagnostics."
+# The preset has changed, but the driver country remains unchanged until
+# explicitly applied. Reflect that distinction in Magisk immediately.
+. "$MODDIR/common.sh"
+refresh_module_description || true

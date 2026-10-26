@@ -2,7 +2,7 @@
 
 **Language: [简体中文](README.md) | English (current)**
 
-**Current version: v1.4.1.** Vendor EHT/MLO properties are changed only when the current WLAN implementation exposes the corresponding setting. No fabricated system property or firmware-version allowlist is required. All wireless operations remain subject to the regulatory requirements of the operating location. Details below include v1.4.0 historical features.
+**Current version: v1.4.2.** Magisk displays country values read back from the self-managed PHY and Android Framework, distinguishing them from the requested profile. Vendor EHT/MLO properties are changed only when the current WLAN implementation exposes the corresponding setting. All wireless operations remain subject to the regulatory requirements of the operating location. Details below include v1.4.0 historical features.
 
 
 A configurable Magisk module for Wi-Fi capability testing on **Xiaomi pudding / Qualcomm peach_v2**.
@@ -36,6 +36,7 @@ v1.4.0 keeps the device's native EHT/MLO capability switches available, audits 6
 - Full PHY frequency table export
 - Current link/interface diagnostics
 - Magisk Action script for immediate apply + report export
+- Read-only Magisk country-status refresh every 300 seconds (configurable; no periodic country reapplication)
 - Clean uninstall of module-owned runtime config/log files
 
 ## Configuration
@@ -63,6 +64,7 @@ COUNTRY_RETRY_DELAY_SEC=2
 ENABLE_DIAGNOSTICS=1
 VERBOSE_LOG=1
 EXPORT_CHANNEL_TABLE=1
+COUNTRY_STATUS_REFRESH_SEC=300
 
 REQUEST_UNRESTRICTED_REGDOMAIN=0
 REQUEST_FULL_TX_POWER=0
@@ -99,6 +101,14 @@ sh /data/adb/modules/wifi7_lab_safe/action.sh
 ```
 
 The Magisk module **Action** button runs the same apply-and-diagnostics path.
+
+### Live country readback in Magisk (v1.4.2)
+
+The module description shows `Driver country:CN | Framework:CN | Requested:CN [consistent]` (labels are localized in Simplified Chinese). The driver value is taken from `iw reg get` for a self-managed PHY; a selected country profile is **never** substituted for an unknown driver. Differing country values, a requested country not taking effect, and unavailable readings are explicitly marked as such.
+
+The description refreshes after boot, manual Action, and by default every 300 seconds without reapplying country settings or repeatedly writing unchanged module metadata. Set `COUNTRY_STATUS_REFRESH_SEC=0` in the runtime config to disable periodic refresh. Reopen the Magisk module list if the UI caches the previous description.
+
+These are reported regulatory-country codes, **not** verification of allowed channels, transmit power, 6 GHz availability, or active 320 MHz operation. Consult exported PHY frequencies and applicable local spectrum regulations.
 
 ## v1.4.0
 

@@ -6,11 +6,12 @@ apply_capability_keepers
 apply_country
 APPLY_RC=$?
 sleep 1
+refresh_module_description || log "WARN cannot update Magisk module status"
 
 OUT=/storage/emulated/0/Download/WiFi7_Capability_status_$(date '+%Y%m%d_%H%M%S').txt
 
 {
-  echo 'WiFi 7 Capability Keeper v1.4.0'
+  echo 'WiFi7-Lab-Safe v1.4.2'
   echo "Time: $(date '+%F %T %z')"
   echo "Device: $(getprop ro.product.device)"
   echo "Apply result: $([ "$APPLY_RC" -eq 0 ] && echo SUCCESS || echo FAILED) (rc=$APPLY_RC)"
@@ -21,6 +22,7 @@ OUT=/storage/emulated/0/Download/WiFi7_Capability_status_$(date '+%Y%m%d_%H%M%S'
   echo
 
   echo '=== Country state ==='
+  echo "Magisk description=$(country_status_description)"
   echo "Framework=$(framework_country)"
   echo "Driver=$(driver_country)"
   dumpsys wifi 2>/dev/null |
@@ -67,5 +69,7 @@ OUT=/storage/emulated/0/Download/WiFi7_Capability_status_$(date '+%Y%m%d_%H%M%S'
 } > "$OUT" 2>&1
 
 chmod 0644 "$OUT"
+echo "Magisk: $(country_status_description)"
+echo 'Note: country-code readback does not prove actual channels or TX power.'
 echo "Saved: $OUT"
 exit "$APPLY_RC"

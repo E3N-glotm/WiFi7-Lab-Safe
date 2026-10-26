@@ -1,4 +1,4 @@
-name: Publish v1.4.1
+name: Publish v1.4.2
 
 on:
   push:
@@ -9,6 +9,9 @@ on:
       - "module.prop"
       - "common.sh"
       - "service.sh"
+      - "action.sh"
+      - "profile.sh"
+      - "tests/test_country_status.sh"
   workflow_dispatch:
 
 permissions:
@@ -25,20 +28,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q '^version=v1.4.1$' module.prop
-          grep -q '^versionCode=141$' module.prop
+          grep -q '^version=v1.4.2$' module.prop
+          grep -q '^versionCode=142$' module.prop
           sh -n common.sh
           sh -n service.sh
           sh -n post-fs-data.sh
           sh -n action.sh
           sh -n profile.sh
           sh -n uninstall.sh
+          sh tests/test_country_status.sh
 
       - name: Build Magisk module ZIP
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="WiFi7-Lab-Safe-v1.4.1.zip"
+          ZIP="WiFi7-Lab-Safe-v1.4.2.zip"
           rm -f "$ZIP"
           zip -9 "$ZIP"             module.prop             wifi7_lab_safe.conf             common.sh             service.sh             post-fs-data.sh             action.sh             profile.sh             uninstall.sh             README.md
           sha256sum "$ZIP" | tee SHA256SUMS.txt
@@ -47,9 +51,13 @@ jobs:
         shell: bash
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## WiFi7-Lab-Safe v1.4.1
+          ## WiFi7-Lab-Safe v1.4.2
 
           ### Changes
+          - Display self-managed PHY driver country, Android Framework country, requested country, and match status directly in Magisk module description.
+          - Read-only status refresh after boot, Action, and every 300 seconds (configurable to off); metadata is written only when the status changes.
+          - Do not claim that a configured profile is effective when firmware differs or the PHY is unreadable.
+          - Add automated simulated-framework/driver regression tests.
           - Added SYSTEM / US / CA / CN / JP / CUSTOM country profiles.
           - Added Android Framework + Qualcomm self-managed PHY country readback.
           - Added driver-country verification before reporting profile apply success.
@@ -68,7 +76,7 @@ jobs:
 
           The module does not patch Qualcomm regulatory databases, construct mixed regulatory domains, disable DFS/AFC enforcement, or force transmit power outside the selected regulatory domain.
 
-          The attached ZIP is the Magisk-installable v1.4.1 package. SHA-256 is included in SHA256SUMS.txt.
+          The attached ZIP is the Magisk-installable v1.4.2 package. SHA-256 is included in SHA256SUMS.txt.
           EOF
 
       - name: Publish GitHub Release
@@ -77,8 +85,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view v1.4.1 >/dev/null 2>&1; then
-            echo "Release v1.4.1 already exists; keeping published artifact unchanged."
+          if gh release view v1.4.2 >/dev/null 2>&1; then
+            echo "Release v1.4.2 already exists; keeping published artifact unchanged."
             exit 0
           fi
-          gh release create v1.4.1             WiFi7-Lab-Safe-v1.4.1.zip             SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "WiFi7-Lab-Safe v1.4.1"             --notes-file RELEASE_NOTES.md
+          gh release create v1.4.2             WiFi7-Lab-Safe-v1.4.2.zip             SHA256SUMS.txt             --target "$GITHUB_SHA"             --title "WiFi7-Lab-Safe v1.4.2"             --notes-file RELEASE_NOTES.md

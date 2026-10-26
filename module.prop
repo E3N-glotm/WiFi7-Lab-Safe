@@ -1,6 +1,6 @@
 id=wifi7_lab_safe
 name=WiFi 7 Capability Keeper
-version=v1.4.1
-versionCode=141
+version=v1.4.2
+versionCode=142
 author=E3N
-description=小米 pudding Wi-Fi 7 实验模块：检测 EHT/MLO、6GHz、320MHz 和驱动国家码；只操作存在的接口，不绕过 DFS/AFC 或无线电监管限制。
+description=驱动国家码:待读取 | 系统:待读取 | 请求:系统自动 [未验证]
