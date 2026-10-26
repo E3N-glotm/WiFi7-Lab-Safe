@@ -1,170 +1,48 @@
-# WiFi7-Lab-Safe
+# WiFi7-Lab-Safe · Wi-Fi 7 能力与监管域诊断
 
-A configurable Magisk module for Wi-Fi capability testing on **Xiaomi pudding / Qualcomm peach_v2**.
+**语言：简体中文（当前） | [English](README_EN.md)**
 
-v1.4.0 keeps the device's native EHT/MLO capability switches available, audits 6 GHz / 320 MHz and related vendor features, applies a standard Android Wi-Fi country profile, and verifies both Android Framework and the Qualcomm self-managed PHY regulatory country before reporting success.
+面向 Xiaomi `pudding`、Qualcomm `peach_v2` 的 Magisk 无线功能研究模块。用于观察 EHT、MLO、6 GHz、320 MHz 相关能力，以及 Android Framework 与高通驱动对国家码的实际反馈。
 
-> **For learning, research, and laboratory reference only.**
->
-> This project is provided solely for educational, research, interoperability, and controlled-laboratory testing. It is not advice or authorization to operate radio equipment outside the rules applicable to your location. Users are responsible for complying with local spectrum, DFS/AFC, channel, indoor/outdoor, and transmit-power requirements.
+**当前版本：v1.4.1** · [下载 Release](https://github.com/E3N-glotm/WiFi7-Lab-Safe/releases)
 
-## 中文说明
+> [!CAUTION]
+> **仅用于学习、研究及合规实验。** 使用无线频谱应遵守当地 DFS、AFC、信道、室内/室外及发射功率规定。仓库不提供绕过监管发射功率、禁用 DFS/AFC 或修改高通监管数据库的功能。
 
-这是一个面向 **Xiaomi pudding / Qualcomm peach_v2** 的可配置 Magisk Wi-Fi 能力测试模块。
+## 主要功能
 
-v1.4.0 在 v1.3.0 的基础上加入了 country profile、Framework + Qualcomm self-managed PHY 双层国家码校验、更完整的信道/DFS/PHY 诊断，以及对设备原生 Wi-Fi 7 能力状态的审计。模块仍然不替换 Qualcomm regulatory database，也不关闭 DFS/AFC 或强制突破监管域发射功率。
+- 检测已存在的 EHT（802.11be）/MLO 厂商属性，**只有接口存在才应用对应配置**，不凭空创建其他 ROM 没有的属性。
+- 核查 6 GHz、320 MHz、TWT、NAN / Wi-Fi Aware、TDLS、漫游、波束成形和 MLO 等能力。
+- 读取 Android Framework 与驱动/PHY 报告的国家码；输出信道、DFS 和 PHY 频率表。
+- 支持 `SYSTEM`、`US`、`CA`、`CN`、`JP` 和自定义国家码请求，所有结果以设备驱动实际接受的状态为准。
+- Wi-Fi Binder 短时故障会有限次数重试；不会保证不被无线固件拒绝。
 
-> **仅供学习、研究与实验室测试参考使用。**
->
-> 本项目不构成绕过或违反所在地无线电监管要求的建议或授权。使用者应自行确认并遵守所在地关于频谱、DFS/AFC、信道、室内/室外使用及发射功率等规定。
+## 配置与用法
 
-## Features
-
-- EHT capability keeper
-- MLO capability keeper
-- Native 6 GHz capability diagnostics
-- 320 MHz EHT capability diagnostics
-- Android Framework + Qualcomm self-managed PHY country readback
-- Country profiles: SYSTEM / US / CA / CN / JP / CUSTOM
-- Retry handling for transient Wi-Fi Binder failures
-- Vendor capability audit for:
-  - Fast Roam
-  - SU Beamforming
-  - 6 GHz vendor capability
-  - TWT / TWT responder
-  - NAN / Wi-Fi Aware
-  - TDLS
-  - MLO link count
-  - EHT/MLO crypto bitmap
-- Per-band enabled/disabled/DFS channel summary
-- Full PHY frequency table export
-- Current link/interface diagnostics
-- Magisk Action script for immediate apply + report export
-- Clean uninstall of module-owned runtime config/log files
-
-## Configuration
-
-Runtime configuration:
-
-```text
-/data/adb/wifi7_lab_safe.conf
-```
-
-Repository default:
+运行时配置：`/data/adb/wifi7_lab_safe.conf`。默认仓库配置为：
 
 ```ini
 COUNTRY_PROFILE=SYSTEM
 COUNTRY_CODE=CN
-
 KEEP_EHT=1
 KEEP_MLO=1
-CHECK_6GHZ_VENDOR_CAPABILITY=1
 VERIFY_DRIVER_COUNTRY=1
-
-COUNTRY_APPLY_RETRIES=12
-COUNTRY_RETRY_DELAY_SEC=2
-
 ENABLE_DIAGNOSTICS=1
-VERBOSE_LOG=1
-EXPORT_CHANNEL_TABLE=1
-
 REQUEST_UNRESTRICTED_REGDOMAIN=0
 REQUEST_FULL_TX_POWER=0
 REQUEST_DISABLE_DFS_AFC=0
 ```
 
-### Profiles
-
-Follow the normal system / telephony country policy:
+Root 终端使用实际支持的配置文件与脚本：
 
 ```sh
 sh /data/adb/modules/wifi7_lab_safe/profile.sh SYSTEM
-```
-
-Request one of the built-in profiles:
-
-```sh
-sh /data/adb/modules/wifi7_lab_safe/profile.sh US
-sh /data/adb/modules/wifi7_lab_safe/profile.sh CA
 sh /data/adb/modules/wifi7_lab_safe/profile.sh CN
-sh /data/adb/modules/wifi7_lab_safe/profile.sh JP
-```
-
-Request another two-letter ISO country code through Android's built-in Wi-Fi framework:
-
-```sh
-sh /data/adb/modules/wifi7_lab_safe/profile.sh CUSTOM TW
-```
-
-Apply the selected profile and export diagnostics:
-
-```sh
 sh /data/adb/modules/wifi7_lab_safe/action.sh
 ```
 
-The Magisk module **Action** button runs the same apply-and-diagnostics path.
+其他 `profile.sh` 国家参数仅在符合所在地要求时使用。检查诊断报告时，优先确认 Framework 与驱动是否一致；**界面显示 US 不等于 PHY 实际启用了 6 GHz 或 320 MHz**。
 
-## v1.4.0
+## 限制与回退
 
-- Replaced the v1.3 `COUNTRY_MODE` interface with `COUNTRY_PROFILE`.
-- Added SYSTEM / US / CA / CN / JP / CUSTOM profiles.
-- Added driver-country parsing from `iw reg get`.
-- A requested country is considered successful only after both Framework and Qualcomm PHY readback match when `VERIFY_DRIVER_COUNTRY=1`.
-- Added detailed vendor capability audit.
-- Added enabled/disabled/DFS channel counts for 2.4 / 5 / 6 GHz.
-- Added full PHY frequency table export.
-- Added `profile.sh` for profile switching.
-- Preserved EHT/MLO capability keeper behavior.
-- Retained v1.3 retry handling for transient Binder failures.
-
-## Device validation
-
-Validated on:
-
-- Xiaomi device codename: `pudding`
-- Android 16 / HyperOS
-- Qualcomm WLAN: `qca_cld3_peach_v2`
-- Driver family reports self-managed regulatory domains
-- Native PHY reports EHT and `320MHz in 6GHz Supported`
-
-Example verified v1.4.0 state on the validation device:
-
-```text
-Framework country: US
-Driver country:    US
-PHY:               US / DFS-FCC
-EHT disable prop:  false
-MLO disable prop:  false
-6 GHz:             native capability present
-320 MHz in 6 GHz:  supported
-```
-
-Exact channels and power ceilings remain dependent on the selected regulatory domain, device firmware, calibration, role, SAR/thermal controls, and access point.
-
-## Migration from v1.3.0
-
-v1.4.0 uses new runtime keys. Existing v1.3 runtime files should be migrated to the new format. A clean v1.4 configuration uses:
-
-```ini
-COUNTRY_PROFILE=SYSTEM
-COUNTRY_CODE=CN
-KEEP_EHT=1
-KEEP_MLO=1
-```
-
-If you previously used `COUNTRY_MODE=request`, choose the equivalent profile or use `CUSTOM <CC>`.
-
-## Scope
-
-The module does **not**:
-
-- patch Qualcomm `regdb.bin` / `regdb_xiaomi.bin`
-- construct mixed/custom regulatory domains
-- disable DFS/AFC enforcement
-- force transmit power outside the selected regulatory domain
-
-The legacy `REQUEST_*` keys remain inert and are logged only for backward-readable configuration.
-
-## License / responsibility
-
-Source code is published for learning and research reference. You are responsible for backups, device recovery, testing methodology, and compliance with the rules applicable to your hardware and location.
+本模块不替换 `regdb.bin`、不合成监管域、不关闭 DFS/AFC、不强制超范围发射功率。启用能力开关不代表路由器、天线校准或监管域支持。禁用/卸载 Magisk 模块并重启可停止模块的后续配置行为。详细兼容性与迁移说明见 [英文文档](README_EN.md)。
