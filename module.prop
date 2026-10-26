@@ -3,4 +3,4 @@ name=WiFi 7 Capability Keeper
 version=v1.4.1
 versionCode=141
 author=E3N
-description=Feature-probes actual EHT/MLO vendor switches and keeps supported 6GHz capabilities available, applies a standards-compliant Android Wi-Fi country profile with framework+driver readback, and exports detailed Wi-Fi 7 diagnostics for pudding/peach_v2. Does not patch regdb, bypass DFS/AFC, or force out-of-domain TX power.
+description=小米 pudding Wi-Fi 7 实验模块：检测 EHT/MLO、6GHz、320MHz 和驱动国家码；只操作存在的接口，不绕过 DFS/AFC 或无线电监管限制。
