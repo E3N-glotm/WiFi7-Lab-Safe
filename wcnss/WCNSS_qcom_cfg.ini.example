@@ -1,0 +1,49 @@
+# WiFi7-Lab v1.5 WCNSS override example (peach_v2 / qca_cld3)
+#
+# Copy this file to a real name, e.g.:
+#   cp wcnss/WCNSS_qcom_cfg.ini.example wcnss/WCNSS_qcom_cfg.ini
+# then uncomment the keys you want. Files ending in .example are NOT
+# deployed. Your keys are merged ON TOP of the vendor config, so only the
+# keys you list are overridden - everything else keeps its vendor value.
+#
+# After editing, run:  sh /data/adb/modules/wifi7_lab_safe/action.sh
+# (with FORCE_WIFI_TOGGLE=1 in the conf, or reboot, to reload the driver)
+#
+# The key names below were verified to exist in this device's
+# /vendor/etc/wifi/peach_v2/WCNSS_qcom_cfg.ini. For any other key (TX
+# chain masks, attenuation, per-band power), grep the vendor file for the
+# exact name first:
+#   grep -inE 'power|chain|atten|tx' /vendor/etc/wifi/peach_v2/WCNSS_qcom_cfg.ini
+
+# --- 6 GHz / Wi-Fi 7 capability flags ---
+# 0 = 6 GHz support enabled, 1 = disabled
+#oem_6g_support_disable=0
+#
+# Number of MLO links the driver will use (0 disables MLO aggregation)
+#mlo_support_link_num=2
+#
+# EHT+MLO crypto bitmap: 0x1 = EHT, 0x2 = MLO (OR for both)
+#oem_eht_mlo_crypto_bitmap=3
+
+# --- TWT ---
+#enable_twt=1
+#twt_responder=1
+
+# --- NAN / Wi-Fi Aware ---
+#nan_feature_config=1
+
+# --- TDLS ---
+#gEnableTDLSSupport=1
+
+# --- Beamforming ---
+#gEnableTxSUBeamformer=1
+
+# --- Fast roaming ---
+#FastRoamEnabled=1
+
+# --- TX power / chain keys ---
+# The driver's power table itself lives in regdb.bin (see REGDB_MOUNT in
+# the module conf) and in nl80211 (see TX_POWER_MODE in the module conf).
+# If the vendor cfg exposes chain-mask or attenuation keys, override them
+# here using the EXACT key name from the vendor file - do not guess names,
+# unknown keys are ignored by the qcacld parser.

@@ -1,176 +1,70 @@
-# WiFi7-Lab-Safe — Wi-Fi 7 Capability Diagnostics
+# WiFi7-Lab — Wi-Fi 7 Full-Capability Lab Module
 
 **Language: [简体中文](README.md) | English (current)**
 
-**Current version: v1.4.2.** Magisk displays country values read back from the self-managed PHY and Android Framework, distinguishing them from the requested profile. Vendor EHT/MLO properties are changed only when the current WLAN implementation exposes the corresponding setting. All wireless operations remain subject to the regulatory requirements of the operating location. Details below include v1.4.0 historical features.
-
-
-A configurable Magisk module for Wi-Fi capability testing on **Xiaomi pudding / Qualcomm peach_v2**.
-
-v1.4.0 keeps the device's native EHT/MLO capability switches available, audits 6 GHz / 320 MHz and related vendor features, applies a standard Android Wi-Fi country profile, and verifies both Android Framework and the Qualcomm self-managed PHY regulatory country before reporting success.
+**Current version: v1.5.0.** Magisk module for **Xiaomi pudding / Qualcomm peach_v2** that went from read-only diagnostics (v1.4) to a full-capability laboratory: regulatory domain (any ISO country / 00 world), transmit power (auto / fixed), WCNSS driver-config override, and regdb regulatory-database replacement are all configurable, modifiable, and reversible. Nothing is locked to a single parameter or power level.
 
 > **For learning, research, and laboratory reference only.**
 >
 > This project is provided solely for educational, research, interoperability, and controlled-laboratory testing. It is not advice or authorization to operate radio equipment outside the rules applicable to your location. Users are responsible for complying with local spectrum, DFS/AFC, channel, indoor/outdoor, and transmit-power requirements.
 
+## v1.5 capability layer (all configurable, all reversible)
 
-## Features
+| Control | Config key | Notes |
+| --- | --- | --- |
+| Regulatory domain / country | `COUNTRY_PROFILE` | `SYSTEM` / `US` / `CA` / `CN` / `JP` / `00` (world) / `CUSTOM` + `COUNTRY_CODE`. The channel/power table for the selected country comes from the regulatory database (see regdb below) |
+| TX power | `TX_POWER_MODE` / `TX_POWER_MBM` | `auto` = regulatory domain controls power; `fixed` = force nl80211 power (millibel, 100 = 1 dB, 24000 = 24 dBm). Self-managed PHY may clamp or refuse; live readback is always reported |
+| WCNSS driver config | `WCNSS_INJECT` | Merges `$MODDIR/wcnss/*.ini` on top of the vendor config into `/data/vendor/wifi/` (read by qcacld ahead of the vendor path). Override individual keys without rebuilding the whole file |
+| regdb replacement | `REGDB_MOUNT` + `$MODDIR/regdb.bin` | Bind-mounts a custom regdb.bin over the detected vendor path — the direct way to change the regulatory channel/power table itself. The vendor partition is never modified |
+| Driver reload without reboot | `FORCE_WIFI_TOGGLE` | Toggles Wi-Fi off/on after deployment so the driver re-reads its config (brief Wi-Fi drop only; no reboot, no cellular/ethernet impact) |
+| EHT / MLO / 6 GHz vendor flags | `KEEP_EHT` / `KEEP_MLO` | Applied only when the ROM exposes the property; never invented |
 
-- EHT capability keeper
+The default configuration is the most-open reasonable baseline (`COUNTRY_PROFILE=US` keeps 6 GHz / 320 MHz inside the regulatory domain; `TX_POWER_MODE=auto`, `FORCE_WIFI_TOGGLE=0`). Edit `/data/adb/wifi7_lab_safe.conf` or use `profile.sh`, then run `action.sh`.
+
+## Features (v1.4 and earlier, retained)
+
+- EHT (802.11be) capability keeper — property is touched only if the ROM exposes it
 - MLO capability keeper
-- Native 6 GHz capability diagnostics
-- 320 MHz EHT capability diagnostics
-- Android Framework + Qualcomm self-managed PHY country readback
-- Country profiles: SYSTEM / US / CA / CN / JP / CUSTOM
-- Retry handling for transient Wi-Fi Binder failures
-- Vendor capability audit for:
-  - Fast Roam
-  - SU Beamforming
-  - 6 GHz vendor capability
-  - TWT / TWT responder
-  - NAN / Wi-Fi Aware
-  - TDLS
-  - MLO link count
-  - EHT/MLO crypto bitmap
-- Per-band enabled/disabled/DFS channel summary
-- Full PHY frequency table export
-- Current link/interface diagnostics
-- Magisk Action script for immediate apply + report export
-- Read-only Magisk country-status refresh every 300 seconds (configurable; no periodic country reapplication)
-- Clean uninstall of module-owned runtime config/log files
+- 6 GHz / 320 MHz / TWT / NAN / Wi-Fi Aware / TDLS / Fast Roam / SU Beamforming / MLO link-count audit
+- Android Framework + Qualcomm self-managed PHY country readback with retry handling
+- 2.4 / 5 / 6 GHz enabled / disabled / DFS channel summaries and full PHY frequency-table export
+- Magisk module description shows live driver country, framework country, requested profile, TX power readback, and consistency state; read-only refresh every 300 s (configurable to off)
 
-## Configuration
-
-Runtime configuration:
-
-```text
-/data/adb/wifi7_lab_safe.conf
-```
-
-Repository default:
-
-```ini
-COUNTRY_PROFILE=SYSTEM
-COUNTRY_CODE=CN
-
-KEEP_EHT=1
-KEEP_MLO=1
-CHECK_6GHZ_VENDOR_CAPABILITY=1
-VERIFY_DRIVER_COUNTRY=1
-
-COUNTRY_APPLY_RETRIES=12
-COUNTRY_RETRY_DELAY_SEC=2
-
-ENABLE_DIAGNOSTICS=1
-VERBOSE_LOG=1
-EXPORT_CHANNEL_TABLE=1
-COUNTRY_STATUS_REFRESH_SEC=300
-
-REQUEST_UNRESTRICTED_REGDOMAIN=0
-REQUEST_FULL_TX_POWER=0
-REQUEST_DISABLE_DFS_AFC=0
-```
-
-### Profiles
-
-Follow the normal system / telephony country policy:
+## Usage
 
 ```sh
-sh /data/adb/modules/wifi7_lab_safe/profile.sh SYSTEM
-```
-
-Request one of the built-in profiles:
-
-```sh
+# country / regulatory domain
 sh /data/adb/modules/wifi7_lab_safe/profile.sh US
-sh /data/adb/modules/wifi7_lab_safe/profile.sh CA
-sh /data/adb/modules/wifi7_lab_safe/profile.sh CN
-sh /data/adb/modules/wifi7_lab_safe/profile.sh JP
-```
+sh /data/adb/modules/wifi7_lab_safe/profile.sh 00
+sh /data/adb/modules/wifi7_lab_safe/profile.sh CUSTOM US
 
-Request another two-letter ISO country code through Android's built-in Wi-Fi framework:
+# TX power
+sh /data/adb/modules/wifi7_lab_safe/profile.sh tx auto
+sh /data/adb/modules/wifi7_lab_safe/profile.sh tx fixed 27000    # 27 dBm
 
-```sh
-sh /data/adb/modules/wifi7_lab_safe/profile.sh CUSTOM TW
-```
+# WCNSS override / regdb replacement
+sh /data/adb/modules/wifi7_lab_safe/profile.sh wcnss /sdcard/Download/my_keys.ini
+sh /data/adb/modules/wifi7_lab_safe/profile.sh regdb /sdcard/Download/regdb.bin
 
-Apply the selected profile and export diagnostics:
+# driver reload switch
+sh /data/adb/modules/wifi7_lab_safe/profile.sh toggle 1
 
-```sh
+# revert TX power / WCNSS / regdb
+sh /data/adb/modules/wifi7_lab_safe/profile.sh reset
+
+# show active capability controls
+sh /data/adb/modules/wifi7_lab_safe/profile.sh show
+
+# apply and export diagnostics
 sh /data/adb/modules/wifi7_lab_safe/action.sh
 ```
 
-The Magisk module **Action** button runs the same apply-and-diagnostics path.
+## Limits and rollback
 
-### Live country readback in Magisk (v1.4.2)
+v1.5 hands over full control of the parameters above; every control is reversible:
 
-The module description shows `Driver country:CN | Framework:CN | Requested:CN [consistent]` (labels are localized in Simplified Chinese). The driver value is taken from `iw reg get` for a self-managed PHY; a selected country profile is **never** substituted for an unknown driver. Differing country values, a requested country not taking effect, and unavailable readings are explicitly marked as such.
+- `profile.sh reset` reverts TX power / WCNSS overrides / regdb mount
+- `uninstall.sh` (runs on module removal) reverts all controls and clears the country override
+- vendor partition files (WCNSS, regdb.bin) are never written directly; overrides go through `/data/vendor/wifi/` and bind mounts, and disappear on uninstall
 
-The description refreshes after boot, manual Action, and by default every 300 seconds without reapplying country settings or repeatedly writing unchanged module metadata. Set `COUNTRY_STATUS_REFRESH_SEC=0` in the runtime config to disable periodic refresh. Reopen the Magisk module list if the UI caches the previous description.
-
-These are reported regulatory-country codes, **not** verification of allowed channels, transmit power, 6 GHz availability, or active 320 MHz operation. Consult exported PHY frequencies and applicable local spectrum regulations.
-
-## v1.4.0
-
-- Replaced the v1.3 `COUNTRY_MODE` interface with `COUNTRY_PROFILE`.
-- Added SYSTEM / US / CA / CN / JP / CUSTOM profiles.
-- Added driver-country parsing from `iw reg get`.
-- A requested country is considered successful only after both Framework and Qualcomm PHY readback match when `VERIFY_DRIVER_COUNTRY=1`.
-- Added detailed vendor capability audit.
-- Added enabled/disabled/DFS channel counts for 2.4 / 5 / 6 GHz.
-- Added full PHY frequency table export.
-- Added `profile.sh` for profile switching.
-- Preserved EHT/MLO capability keeper behavior.
-- Retained v1.3 retry handling for transient Binder failures.
-
-## Device validation
-
-Validated on:
-
-- Xiaomi device codename: `pudding`
-- Android 16 / HyperOS
-- Qualcomm WLAN: `qca_cld3_peach_v2`
-- Driver family reports self-managed regulatory domains
-- Native PHY reports EHT and `320MHz in 6GHz Supported`
-
-Example verified v1.4.0 state on the validation device:
-
-```text
-Framework country: US
-Driver country:    US
-PHY:               US / DFS-FCC
-EHT disable prop:  false
-MLO disable prop:  false
-6 GHz:             native capability present
-320 MHz in 6 GHz:  supported
-```
-
-Exact channels and power ceilings remain dependent on the selected regulatory domain, device firmware, calibration, role, SAR/thermal controls, and access point.
-
-## Migration from v1.3.0
-
-v1.4.0 uses new runtime keys. Existing v1.3 runtime files should be migrated to the new format. A clean v1.4 configuration uses:
-
-```ini
-COUNTRY_PROFILE=SYSTEM
-COUNTRY_CODE=CN
-KEEP_EHT=1
-KEEP_MLO=1
-```
-
-If you previously used `COUNTRY_MODE=request`, choose the equivalent profile or use `CUSTOM <CC>`.
-
-## Scope
-
-The module does **not**:
-
-- patch Qualcomm `regdb.bin` / `regdb_xiaomi.bin`
-- construct mixed/custom regulatory domains
-- disable DFS/AFC enforcement
-- force transmit power outside the selected regulatory domain
-
-The legacy `REQUEST_*` keys remain inert and are logged only for backward-readable configuration.
-
-## License / responsibility
-
-Source code is published for learning and research reference. You are responsible for backups, device recovery, testing methodology, and compliance with the rules applicable to your hardware and location.
+A displayed country is not a channel/power authorization: verify the exported PHY frequency table and local regulations before relying on any band.

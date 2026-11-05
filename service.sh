@@ -6,9 +6,10 @@ until [ "$(getprop sys.boot_completed)" = "1" ]; do
   sleep 2
 done
 
-log "service start v1.4.2"
+log "service start v1.5.0"
 apply_capability_keepers
 apply_country
+apply_capability_controls
 refresh_module_description || log "WARN cannot update Magisk module status"
 
 if [ "$VERBOSE_LOG" = "1" ]; then
@@ -16,12 +17,14 @@ if [ "$VERBOSE_LOG" = "1" ]; then
   log "MLO disable=$(getprop persist.vendor.wlan.disable.mlo)"
   log "framework country=$(framework_country)"
   log "driver country=$(driver_country)"
+  log "txpower readback=$(iface_txpower_dbm) dBm (mode=$TX_POWER_MODE)"
   dumpsys wifi 2>/dev/null |
     grep -m8 -E 'mTelephonyCountryCode:|mOverrideCountryCode:|mDriverCountryCode:|mFrameworkCountryCode:' >> "$LOG"
   dump_channel_summary >> "$LOG"
+  dump_capability_controls >> "$LOG"
 fi
 
-# Refresh the readback only; NEVER reapply a country profile in this loop.
+# Refresh the readback only; NEVER reapply controls in this loop.
 # The 5-minute default adds no high-frequency polling and only writes when
 # the actual displayed state changes. Set 0 to disable periodic refresh.
 case "$COUNTRY_STATUS_REFRESH_SEC" in
