@@ -297,10 +297,20 @@ cleanup_wcnss() {
 }
 
 detect_regdb_path() {
-  # Board-specific Qualcomm layouts first: this device keeps regdb under
-  # /vendor/firmware_mnt/image/<board>/ (e.g. peach), not the generic paths.
+  # The bind target MUST be the exact file the WLAN firmware downloads, not
+  # just any regdb.bin. Live proof on this board (peach_v2):
+  #   cnss: Downloading REGDB: peach/regdb_xiaomi.bin, size: 24278
+  # Xiaomi boards ship a second regdb_<vendor>.bin that the driver prefers;
+  # binding only regdb.bin left every earlier regdb swap a no-op. So vendor-
+  # suffixed names are searched BEFORE the plain regdb.bin, and REGDB_TARGET
+  # lets an operator pin the exact path. Non-Xiaomi boards simply have no
+  # regdb_xiaomi.bin, so the [ -f ] test falls through to regdb.bin.
   # REGDB_SEARCH_GLOBS overrides the list (used by regression tests).
-  globs=${REGDB_SEARCH_GLOBS:-"/vendor/firmware_mnt/image/*/regdb.bin /vendor/firmware/wlan/*/regdb.bin /vendor/firmware/regdb.bin /vendor/lib64/regdb.bin /vendor/etc/wifi/regdb.bin /vendor/firmware_mnt/image/regdb.bin"}
+  if [ -n "$REGDB_TARGET" ] && [ -f "$REGDB_TARGET" ]; then
+    echo "$REGDB_TARGET"
+    return 0
+  fi
+  globs=${REGDB_SEARCH_GLOBS:-"/vendor/firmware_mnt/image/*/regdb_xiaomi.bin /vendor/firmware_mnt/image/*/regdb*.bin /vendor/firmware/wlan/*/regdb.bin /vendor/firmware/regdb.bin /vendor/lib64/regdb.bin /vendor/etc/wifi/regdb.bin /vendor/firmware_mnt/image/regdb.bin"}
   for p in $globs; do
     if [ -f "$p" ]; then
       echo "$p"
