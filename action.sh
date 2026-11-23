@@ -14,8 +14,9 @@ refresh_module_description || log "WARN cannot update Magisk module status"
 
 OUT=/storage/emulated/0/Download/WiFi7_Capability_status_$(date '+%Y%m%d_%H%M%S').txt
 
+if [ "$ENABLE_DIAGNOSTICS" = "1" ]; then
 {
-  echo 'WiFi7-Lab-Safe v1.5.0'
+  echo 'WiFi7-Lab-Safe v1.5.1'
   echo "Time: $(date '+%F %T %z')"
   echo "Device: $(getprop ro.product.device)"
   echo "Country apply: $([ "$COUNTRY_RC" -eq 0 ] && echo SUCCESS || echo FAILED) (rc=$COUNTRY_RC)"
@@ -44,6 +45,9 @@ OUT=/storage/emulated/0/Download/WiFi7_Capability_status_$(date '+%Y%m%d_%H%M%S'
   echo '=== Channel summary ==='
   dump_channel_summary
   echo
+  echo '=== Regulatory power ceilings (live iw reg get) ==='
+  dump_regulatory_power
+  echo
   if [ "$EXPORT_CHANNEL_TABLE" = "1" ]; then
     echo '=== Regulatory state ==='
     iw reg get 2>/dev/null
@@ -70,7 +74,11 @@ OUT=/storage/emulated/0/Download/WiFi7_Capability_status_$(date '+%Y%m%d_%H%M%S'
 } > "$OUT" 2>&1
 
 chmod 0644 "$OUT"
+DIAG_OUT="$OUT"
+else
+  DIAG_OUT=""
+fi
 echo "Magisk: $(country_status_description)"
 echo "Note: all values are live readbacks; verify channels/txpower against local regulations before use."
-echo "Saved: $OUT"
+[ -n "$DIAG_OUT" ] && echo "Saved: $DIAG_OUT" || echo "Diagnostics export disabled (ENABLE_DIAGNOSTICS=0)."
 exit "$APPLY_RC"

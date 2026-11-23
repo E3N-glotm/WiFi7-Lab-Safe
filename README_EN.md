@@ -2,7 +2,7 @@
 
 **Language: [简体中文](README.md) | English (current)**
 
-**Current version: v1.5.0.** Magisk module for **Xiaomi pudding / Qualcomm peach_v2** that went from read-only diagnostics (v1.4) to a full-capability laboratory: regulatory domain (any ISO country / 00 world), transmit power (auto / fixed), WCNSS driver-config override, and regdb regulatory-database replacement are all configurable, modifiable, and reversible. Nothing is locked to a single parameter or power level.
+**Current version: v1.5.1 (bug-fix release).** Magisk module for **Xiaomi pudding / Qualcomm peach_v2** that went from read-only diagnostics (v1.4) to a full-capability laboratory: regulatory domain (any ISO country / 00 world), transmit power (auto / fixed), WCNSS driver-config override, and regdb regulatory-database replacement are all configurable, modifiable, and reversible. Nothing is locked to a single parameter or power level.
 
 > **For learning, research, and laboratory reference only.**
 >
@@ -14,12 +14,23 @@
 | --- | --- | --- |
 | Regulatory domain / country | `COUNTRY_PROFILE` | `SYSTEM` / `US` / `CA` / `CN` / `JP` / `00` (world) / `CUSTOM` + `COUNTRY_CODE`. The channel/power table for the selected country comes from the regulatory database (see regdb below) |
 | TX power | `TX_POWER_MODE` / `TX_POWER_MBM` | `auto` = regulatory domain controls power; `fixed` = force nl80211 power (millibel, 100 = 1 dB, 24000 = 24 dBm). Self-managed PHY may clamp or refuse; live readback is always reported |
-| WCNSS driver config | `WCNSS_INJECT` | Merges `$MODDIR/wcnss/*.ini` on top of the vendor config into `/data/vendor/wifi/` (read by qcacld ahead of the vendor path). Override individual keys without rebuilding the whole file |
+| WCNSS driver config | `WCNSS_INJECT` | Merges `$MODDIR/wcnss/*.ini` on top of the vendor config into `/data/vendor/wifi/` (read by qcacld ahead of the vendor path). Override individual keys without rebuilding the whole file; keys are inserted **before the vendor file's `END` marker** (qcacld ignores anything after END) |
 | regdb replacement | `REGDB_MOUNT` + `$MODDIR/regdb.bin` | Bind-mounts a custom regdb.bin over the detected vendor path — the direct way to change the regulatory channel/power table itself. The vendor partition is never modified |
 | Driver reload without reboot | `FORCE_WIFI_TOGGLE` | Toggles Wi-Fi off/on after deployment so the driver re-reads its config (brief Wi-Fi drop only; no reboot, no cellular/ethernet impact) |
 | EHT / MLO / 6 GHz vendor flags | `KEEP_EHT` / `KEEP_MLO` | Applied only when the ROM exposes the property; never invented |
 
 The default configuration is the most-open reasonable baseline (`COUNTRY_PROFILE=US` keeps 6 GHz / 320 MHz inside the regulatory domain; `TX_POWER_MODE=auto`, `FORCE_WIFI_TOGGLE=0`). Edit `/data/adb/wifi7_lab_safe.conf` or use `profile.sh`, then run `action.sh`.
+
+## v1.5.1 fixes (each one reproduced on the validation device first)
+
+- **TX power was silently skipped**: this device prints `Wiphy phy0` from `iw phy`, not `phy#0`, so the PHY index was never detected and fixed/auto power never reached the driver. Both spellings are now handled, and an nl80211 refusal (I/O error -5 on this self-managed PHY) is logged with the live readback instead of being reported as success.
+- Switching `TX_POWER_MODE` back to `auto` now actually calls `iw phy <phy> set txpower auto` (it previously returned success without touching the driver).
+- **WCNSS overrides were appended after the `END` marker and ignored by the parser**; keys are now inserted before END so they reach the driver.
+- regdb target detection now covers this device's board directory layout (`/vendor/firmware_mnt/image/<board>/regdb.bin`).
+- The channel summary matched `* NNNN MHz` and counted nothing on the real decimal dump (`* 2412.0 MHz`); counts are now correct.
+- `ENABLE_DIAGNOSTICS=0` now really skips the export.
+- `REQUEST_DISABLE_DFS_AFC=1` is no longer inert: it deploys the vendor-verified DFS keys into the injected WCNSS ini (the driver keeps final discretion; verify the exported table).
+- The diagnostics export now includes a **live per-band regulatory power ceiling table** from `iw reg get`, with DFS / NO-IR / NO-OUTDOOR / PASSIVE flags, so 00 vs US vs CN power and restriction differences are readable at a glance.
 
 ## Features (v1.4 and earlier, retained)
 

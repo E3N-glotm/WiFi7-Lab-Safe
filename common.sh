@@ -102,7 +102,12 @@ display_country() {
 }
 
 first_phy() {
-  iw phy 2>/dev/null | sed -n 's/^phy#\([0-9][0-9]*\).*/phy\1/p' | head -1
+  # iw phy prints "Wiphy phy<N>" on this device; older iw builds print
+  # "phy#<N>". Accept both so TX control is not silently skipped.
+  iw phy 2>/dev/null | awk '
+    /^Wiphy phy[0-9]+/ { print $2; exit }
+    /^phy#[0-9]+/ { sub(/^phy#/, "phy"); print $1; exit }
+  '
 }
 
 iface_txpower_dbm() {
@@ -121,7 +126,22 @@ apply_tx_power() {
   # TX power control is request-and-verify: the self-managed PHY may refuse
   # nl80211 txpower writes. The readback value is always reported as-is.
   case "$(upper "$TX_POWER_MODE")" in
-    AUTO|'') return 0 ;;
+    AUTO|'')
+      # Actively restore driver-managed power when switching back from a
+      # previously forced value. A refusal here usually means the PHY never
+      # accepted a fixed override in the first place; log, do not fail.
+      phy=$(first_phy)
+      if [ -n "$phy" ]; then
+        out=$(iw phy "$phy" set txpower auto 2>&1)
+        rc=$?
+        if [ "$rc" -ne 0 ]; then
+          log "note txpower auto not re-applied on $phy (rc=$rc): $out"
+        else
+          log "SUCCESS txpower auto restored on $phy, readback=$(iface_txpower_dbm)"
+        fi
+      fi
+      return 0
+      ;;
     FIXED)
       case "$TX_POWER_MBM" in
         ''|*[!0-9]*)
@@ -152,8 +172,13 @@ apply_tx_power() {
 reset_tx_power() {
   phy=$(first_phy)
   if [ -n "$phy" ]; then
-    iw phy "$phy" set txpower auto >/dev/null 2>&1 \
-      && log "reset txpower to auto"
+    out=$(iw phy "$phy" set txpower auto 2>&1)
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      log "reset txpower to auto on $phy"
+    else
+      log "reset txpower auto refused on $phy (rc=$rc): $out"
+    fi
   fi
   return 0
 }
@@ -161,36 +186,103 @@ reset_tx_power() {
 # Deploy user-edited WCNSS keys. The qcacld driver reads
 # /data/vendor/wifi/WCNSS_qcom_cfg.ini ahead of the read-only vendor path,
 # so this shadows vendor configuration without touching any partition.
-# User keys are appended to a copy of the vendor cfg (later entries win in
-# the qcacld parser), so a partial key file cannot wipe other defaults.
+# The vendor ini ends with an END marker and the qcacld parser ignores
+# anything after it, so user keys are inserted immediately BEFORE END
+# (or appended when the vendor file has no END marker).
+
+dfs_afc_active() {
+  case "$(upper "$REQUEST_DISABLE_DFS_AFC")" in
+    1|TRUE|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# DFS/AFC request keys. Every key below was verified to exist in this
+# device's vendor WCNSS cfg and the values follow the vendor-file comments.
+# The driver keeps final discretion over actual DFS/AFC enforcement.
+dfs_afc_keys() {
+  printf '# WiFi7-Lab DFS/AFC request (driver decides final enforcement)\n'
+  printf 'gEnableDFSMasterCap=0\n'
+  printf 'discardDFSchannelforMode=0\n'
+  printf 'gSkipDfsChannelInP2pSearch=0\n'
+  printf 'gAllowDFSChannelRoam=1\n'
+}
+
+merge_wcnss_target() {
+  base=$1
+  override=$2
+  tmp="$WCNSS_TARGET_DIR/.$base.merge.$$"
+  if [ -r "$VENDOR_CFG" ]; then
+    if ! awk -v USER_INI="$override" '
+      BEGIN { inserted = 0 }
+      /^[[:space:]]*END[[:space:]]*$/ && !inserted {
+        print "# --- WiFi7-Lab overrides (inserted before END) ---"
+        while ((getline line < USER_INI) > 0) print line
+        close(USER_INI)
+        inserted = 1
+      }
+      { print }
+      END {
+        if (!inserted) {
+          print "# --- WiFi7-Lab overrides ---"
+          while ((getline line < USER_INI) > 0) print line
+          close(USER_INI)
+        }
+      }
+    ' "$VENDOR_CFG" > "$tmp"; then
+      rm -f "$tmp"
+      log "ERROR WCNSS merge failed for $base"
+      return 1
+    fi
+    mv -f "$tmp" "$WCNSS_TARGET_DIR/$base"
+  else
+    cp -f "$override" "$WCNSS_TARGET_DIR/$base" \
+      || { log "WARN failed to deploy $base"; return 1; }
+  fi
+  chmod 0644 "$WCNSS_TARGET_DIR/$base"
+  if ! grep -qx "$base" "$WCNSS_MANIFEST" 2>/dev/null; then
+    echo "$base" >> "$WCNSS_MANIFEST"
+  fi
+  log "deployed WCNSS override: $base -> $WCNSS_TARGET_DIR/"
+  return 0
+}
+
 deploy_wcnss() {
-  [ "$WCNSS_INJECT" = "1" ] || { log "WCNSS inject disabled by config"; return 0; }
-  [ -d "$INJECT_DIR" ] || return 0
+  if [ "$WCNSS_INJECT" != "1" ]; then
+    dfs_afc_active && log "note: REQUEST_DISABLE_DFS_AFC requires WCNSS_INJECT=1"
+    log "WCNSS inject disabled by config"
+    return 0
+  fi
   mkdir -p "$WCNSS_TARGET_DIR"
   found=0
-  for f in "$INJECT_DIR"/*.ini; do
-    [ -f "$f" ] || continue
-    case "$(basename "$f")" in
-      *.example) continue ;;
-    esac
-    found=1
-    base=$(basename "$f")
-    if [ -r "$VENDOR_CFG" ]; then
-      tmp="$WCNSS_TARGET_DIR/.$base.merge.$$"
-      { cat "$VENDOR_CFG"; echo "# --- WiFi7-Lab user overrides ($base) ---"; cat "$f"; } > "$tmp" \
-        || { rm -f "$tmp"; continue; }
-      mv -f "$tmp" "$WCNSS_TARGET_DIR/$base"
-    else
-      cp -f "$f" "$WCNSS_TARGET_DIR/$base" \
-        || { log "WARN failed to deploy $base"; continue; }
+  if [ -d "$INJECT_DIR" ]; then
+    for f in "$INJECT_DIR"/*.ini; do
+      [ -f "$f" ] || continue
+      case "$(basename "$f")" in
+        *.example) continue ;;
+      esac
+      found=1
+      base=$(basename "$f")
+      combined="$WCNSS_TARGET_DIR/.$base.combined.$$"
+      cat "$f" > "$combined"
+      if dfs_afc_active && [ "$base" = "WCNSS_qcom_cfg.ini" ]; then
+        dfs_afc_keys >> "$combined"
+      fi
+      merge_wcnss_target "$base" "$combined" || { rm -f "$combined"; continue; }
+      rm -f "$combined"
+    done
+  fi
+  # DFS/AFC requested but no user file carried the keys: deploy them alone.
+  if dfs_afc_active && [ ! -e "$WCNSS_TARGET_DIR/WCNSS_qcom_cfg.ini" ]; then
+    keys="$WCNSS_TARGET_DIR/.dfs_keys.$$"
+    dfs_afc_keys > "$keys"
+    if merge_wcnss_target "WCNSS_qcom_cfg.ini" "$keys"; then
+      found=1
+      log "SUCCESS DFS/AFC keys deployed (REQUEST_DISABLE_DFS_AFC)"
     fi
-    chmod 0644 "$WCNSS_TARGET_DIR/$base"
-    if ! grep -qx "$base" "$WCNSS_MANIFEST" 2>/dev/null; then
-      echo "$base" >> "$WCNSS_MANIFEST"
-    fi
-    log "deployed WCNSS override: $base -> $WCNSS_TARGET_DIR/"
-  done
-  [ "$found" = "1" ] || log "WCNSS inject enabled but $INJECT_DIR has no .ini files"
+    rm -f "$keys"
+  fi
+  [ "$found" = "1" ] || log "WCNSS inject enabled but no overrides to deploy"
   return 0
 }
 
@@ -205,8 +297,11 @@ cleanup_wcnss() {
 }
 
 detect_regdb_path() {
-  for p in /vendor/firmware/regdb.bin /vendor/lib64/regdb.bin \
-           /vendor/etc/wifi/regdb.bin /vendor/firmware_mnt/image/regdb.bin; do
+  # Board-specific Qualcomm layouts first: this device keeps regdb under
+  # /vendor/firmware_mnt/image/<board>/ (e.g. peach), not the generic paths.
+  # REGDB_SEARCH_GLOBS overrides the list (used by regression tests).
+  globs=${REGDB_SEARCH_GLOBS:-"/vendor/firmware_mnt/image/*/regdb.bin /vendor/firmware/wlan/*/regdb.bin /vendor/firmware/regdb.bin /vendor/lib64/regdb.bin /vendor/etc/wifi/regdb.bin /vendor/firmware_mnt/image/regdb.bin"}
+  for p in $globs; do
     if [ -f "$p" ]; then
       echo "$p"
       return 0
@@ -518,7 +613,7 @@ dump_channel_summary() {
     /Band 1:/ {band="2.4GHz"}
     /Band 2:/ {band="5GHz"}
     /Band 4:/ {band="6GHz"}
-    /^[[:space:]]*\* [0-9]+ MHz/ {
+    /^[[:space:]]*\* [0-9][0-9.]* MHz/ {
       total[band]++
       if ($0 ~ /disabled/) disabled[band]++
       else enabled[band]++
@@ -540,6 +635,41 @@ dump_wifi7_markers() {
     head -120
 }
 
+# Per-band power ceiling + restriction flags read from the regulatory table
+# (iw reg get). Values are regulatory ceilings, not measured TX power.
+dump_regulatory_power() {
+  iw reg get 2>/dev/null | awk '
+    /^country / { country=$2; gsub(/:/,"",country); print "country " country }
+    /\([0-9]+ - [0-9]+ @ [0-9]+\)/ {
+      # toybox awk has no 3-arg match(); extract the freq window with RSTART.
+      if (match($0, /[0-9]+ - [0-9]+ @ [0-9]+/)) {
+        w = substr($0, RSTART, RLENGTH)
+        split(w, a, / - | @ /)
+        s=a[1]+0; e=a[2]+0; bw=a[3]+0
+      } else { next }
+      # classify by frequency, not by leading digits (5925/5945 are 6 GHz)
+      band=""
+      if (s >= 2400 && s < 2500) band="2.4GHz"
+      else if (s >= 4900 && s < 5925) band="5GHz"
+      else if (s >= 5925 && s < 7200) band="6GHz"
+      maxp=0
+      np=split($0, f, ",")
+      for (i=1; i<=np; i++) {
+        gsub(/[ ()]/, "", f[i])
+        if (f[i] ~ /^[0-9]+$/ && f[i]+0 >= 1 && f[i]+0 <= 60 && f[i]+0 > maxp) maxp=f[i]+0
+      }
+      flags=""
+      if ($0 ~ /DFS/) flags=flags" DFS"
+      if ($0 ~ /NO-IR|no IR/) flags=flags" NO-IR"
+      if ($0 ~ /NO-OUTDOOR|no outdoor/) flags=flags" NO-OUTDOOR"
+      if ($0 ~ /PASSIVE-SCAN|passive scan|no IR/) flags=flags" PASSIVE"
+      if (band!="") {
+        printf "%-7s %6d-%-6d @%-4d max=%-3d%s\n", band, s, e, bw, maxp, flags
+      }
+    }
+  '
+}
+
 dump_capability_controls() {
   echo "TX_POWER_MODE=$TX_POWER_MODE"
   echo "TX_POWER_MBM=$TX_POWER_MBM"
@@ -557,4 +687,10 @@ dump_capability_controls() {
     echo "mounted: none"
   fi
   echo "FORCE_WIFI_TOGGLE=$FORCE_WIFI_TOGGLE"
+  echo "REQUEST_DISABLE_DFS_AFC=$REQUEST_DISABLE_DFS_AFC"
+  if grep -q 'WiFi7-Lab DFS/AFC request' "$WCNSS_TARGET_DIR/WCNSS_qcom_cfg.ini" 2>/dev/null; then
+    echo "DFS/AFC keys deployed: yes"
+  else
+    echo "DFS/AFC keys deployed: no"
+  fi
 }

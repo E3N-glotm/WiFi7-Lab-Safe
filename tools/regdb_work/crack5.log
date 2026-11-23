@@ -1,0 +1,14 @@
+hdr stock=cea2 xiaomi=e969
+sum f01: 5fbb vs 5fc4
+sum b2 : 03b9 vs 0423
+sum grp: c2bf vs 02c4
+sum f5 : b9c4 vs 5ac4
+xor f01: 0067 vs 0056
+words16 idx: stock=24a3 xiaomi=ed5b (hdr cea2/e969)
+=== CRC16 full poly brute force ===
+table built
+Traceback (most recent call last):
+  File "E:\dev\WiFi7-Lab-Safe\tools\regdb_work\crack5.py", line 105, in <module>
+    crc1 = T[(crc1 >> 8) ^ byte]  # gather: T rows indexed by (poly, byte-idx)
+              ~~~~~^^~~
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 8.00 GiB for an array with shape (65536, 256, 256) and data type uint16

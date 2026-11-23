@@ -6,7 +6,7 @@ until [ "$(getprop sys.boot_completed)" = "1" ]; do
   sleep 2
 done
 
-log "service start v1.5.0"
+log "service start v1.5.1"
 apply_capability_keepers
 apply_country
 apply_capability_controls

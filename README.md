@@ -4,7 +4,7 @@
 
 面向 Xiaomi `pudding`、Qualcomm `peach_v2` 的 Magisk 无线功能实验室模块。v1.5 起从"只读诊断"升级为**全能力开放 + 全参数可调**：监管域（任意 ISO 国家码 / 00 世界域）、发射功率（自动 / 固定 dBm）、WCNSS 驱动配置覆盖、regdb 监管数据库替换，全部做成可配置项，随时修改、随时回滚，**不锁死在任何参数上**。
 
-**当前版本：v1.5.0** · [下载 Release](https://github.com/E3N-glotm/WiFi7-Lab-Safe/releases)
+**当前版本：v1.5.1**（修复版）· [下载 Release](https://github.com/E3N-glotm/WiFi7-Lab-Safe/releases)
 
 > [!CAUTION]
 > **仅用于学习、研究及合规实验。** 开放所有能力后，使用无线频谱应自行遵守当地 DFS、AFC、信道、室内/室外及发射功率规定。模块只负责把能力和参数交到你的手里，最终生效以驱动实际接受的状态为准——诊断导出里的每个数值都是**实时回读**，不是配置文件的回显。
@@ -15,12 +15,23 @@
 | --- | --- | --- |
 | 监管域 / 国家码 | `COUNTRY_PROFILE` | `SYSTEM` / `US` / `CA` / `CN` / `JP` / `00`（世界域）/ `CUSTOM` + `COUNTRY_CODE`。哪些 6 GHz / 320 MHz / DFS 信道存在，由所选国家的监管数据库决定 |
 | 发射功率 | `TX_POWER_MODE` / `TX_POWER_MBM` | `auto` = 交给监管域/驱动；`fixed` = 用 nl80211 强制固定功率（millibel，100 = 1 dB，24000 = 24 dBm）。自管理 PHY 可能拒绝/钳位，一切以回读为准 |
-| WCNSS 驱动配置 | `WCNSS_INJECT` | 把 `$MODDIR/wcnss/*.ini` 合并到 `/data/vendor/wifi/`（qcacld 驱动优先读取的路径），覆盖单个键而不重建整个文件；用户键追加在 vendor 文件之后（后者生效） |
+| WCNSS 驱动配置 | `WCNSS_INJECT` | 把 `$MODDIR/wcnss/*.ini` 合并到 `/data/vendor/wifi/`（qcacld 驱动优先读取的路径），覆盖单个键而不重建整个文件；用户键**插入到 vendor 文件的 `END` 标记之前**（qcacld 不读 END 之后的内容） |
 | regdb 监管数据库 | `REGDB_MOUNT` + `$MODDIR/regdb.bin` | 将自定义 `regdb.bin` bind-mount 到检测到的 vendor 路径之上——**直接改监管信道/功率表的底层方式**。vendor 分区原文件永不修改，卸载即还原 |
 | 驱动重载（免重启） | `FORCE_WIFI_TOGGLE` | WCNSS/regdb 改动后 Wi-Fi 开关一次让驱动重读配置（只断 Wi-Fi，不断蜂窝/以太网，不重启）；留 0 则下次开机生效 |
 | EHT / MLO / 6 GHz 厂商开关 | `KEEP_EHT` / `KEEP_MLO` | 仅当 ROM 暴露对应属性时才应用，不凭空创建 |
 
 默认配置给**最开放的合理基线**（`COUNTRY_PROFILE=US` 保证 6 GHz / 320 MHz 在监管域内），其余能力开关默认打开但保持安全（`TX_POWER_MODE=auto`、`FORCE_WIFI_TOGGLE=0`）。想怎么调就改 `/data/adb/wifi7_lab_safe.conf` 或用 `profile.sh`，然后 `action.sh` 立即生效并导出诊断。
+
+## v1.5.1 修复（均在验证机上先复现再修）
+
+- **发射功率此前被静默跳过**：本机 `iw phy` 输出的是 `Wiphy phy0` 而非 `phy#0`，PHY 序号识别不到，fixed/auto 功率根本没发到驱动。现两种写法都识别；self-managed PHY 的 nl80211 拒绝（I/O error -5）会连同回读值一起如实记录，不再谎报成功。
+- `TX_POWER_MODE` 切回 `auto` 现在真正执行 `iw phy <phy> set txpower auto`（之前只返回成功、没调驱动）。
+- **WCNSS 覆盖此前追加在 `END` 之后被解析器忽略**；现插入到 `END` 之前，注入键才真正到达驱动。
+- regdb 目标识别补上本机的板级目录布局（`/vendor/firmware_mnt/image/<board>/regdb.bin`），bind-mount 现在能找到。
+- 信道汇总此前按 `* NNNN MHz` 匹配，对真实小数表（`* 2412.0 MHz`）恒为 0；现已正确计数。
+- `ENABLE_DIAGNOSTICS=0` 现在真正跳过诊断导出。
+- `REQUEST_DISABLE_DFS_AFC=1` 不再空转：向注入的 WCNSS ini 下发厂商已确认的 DFS 键（驱动保留最终决定权，以导出信道表为准）。
+- 诊断导出现新增**逐频段监管功率上限表**（取自 `iw reg get`，含 DFS / NO-IR / NO-OUTDOOR / PASSIVE 标记），00 / US / CN 的功率与限制差异一屏可读。
 
 ## 主要功能
 
