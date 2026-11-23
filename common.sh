@@ -298,8 +298,22 @@ cleanup_wcnss() {
 
 detect_regdb_path() {
   # The bind target MUST be the exact file the WLAN firmware downloads, not
-  # just any regdb.bin. Live proof on this board (peach_v2):
-  #   cnss: Downloading REGDB: peach/regdb_xiaomi.bin, size: 24278
+  # just any regdb.bin. Reproducible proof on this board (peach_v2) is the
+  # file-name literal compiled into the loader module:
+  #   grep -aob 'regdb[_a-zA-Z0-9.]*' /vendor/lib/modules/icnss2.ko
+  #     -> regdb_xiaomi.bin          (and no "regdb.bin" anywhere in it)
+  #   grep -aob 'regdb[_a-zA-Z0-9.]*' /vendor/lib/modules/cnss2.ko
+  #     -> regdb_xiaomi.bin
+  # Upstream icnss_qmi.c uses #define REGDB_FILE_NAME "regdb.bin", so Xiaomi
+  # renamed it in the board branch. Both files exist on /vendor here, both
+  # 24278 bytes, differing in 623 bytes, which makes the choice easy to get
+  # wrong silently. Binding only regdb.bin leaves the swap a no-op.
+  # (A "cnss: Downloading REGDB:" logcat line was cited for this earlier; it
+  # is not present in this build's logcat/dmesg, so the ko literal is the
+  # evidence to re-run. Note also that the live iw regulatory table has been
+  # shown to come from the host built-in table keyed by alpha2, so a regdb
+  # swap is not a way to change it on this platform - see
+  # notes/v1.5.1-max-power-regdb-plan.md.)
   # Xiaomi boards ship a second regdb_<vendor>.bin that the driver prefers;
   # binding only regdb.bin left every earlier regdb swap a no-op. So vendor-
   # suffixed names are searched BEFORE the plain regdb.bin, and REGDB_TARGET
